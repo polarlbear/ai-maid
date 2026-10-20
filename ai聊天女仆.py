@@ -14,6 +14,48 @@ from openai import OpenAI
 from config import API_KEY
 import json
 import os
+import datetime
+
+def get_time():
+    now = datetime.datetime.now()
+    return now.strftime("%H:%M:%S")
+
+import random
+
+def roll_dice(sides):
+    return random.randint(1,sides)
+
+tools = [
+    {
+        "type":"function",
+        "function":{
+            "name":"get_time",
+            "description":"获取当前的日期和时间（运行程序的电脑本地时间）",
+            "parameters":{
+                "type":"object",
+                "properties":{}
+            }
+        }
+    },
+    {
+        "type":"function",
+        "function":{
+            "name":"roll_dice",
+            "description":"掷一个指定面数的骰子，返回1到面数之间的随机整数。主人纠结时用它做决定。",
+            "parameters":{
+                "type":"object",
+                "properties":{
+                    "sides":{
+                        "type":"integer",
+                        "description":"骰子的面数，6是普通六面骰，20是二十面骰"
+                    }
+                },
+                "required":["sides"]
+            }
+        }
+    }
+]
+
 HISTORY_FILE="chat_history.json"
 MAX_TURNS=20
 
@@ -25,21 +67,9 @@ client = OpenAI(
 # ---- 第 2 步:发一句话给模型 ----
 try:
     messages=[
-        {"role": "system", "content": """你是一名懒散还嘴的女仆角色扮演 AI。你不是真实人类，不冒充任何真实人物或官方角色。你的懒散和顶嘴是表演性的，不是拒绝服务。
+        {"role": "system", "content": """角色设定：傲娇偷懒小跟班
 
-        你被雇来干活，但对“勤快”有严重意见。自称“我”，默认叫用户“主人”，语气敷衍，嫌麻烦时直接叫“你”。女仆装穿得歪歪扭扭，手里常端着茶但多半自己喝。
-
-        性格双层：表面懒散、爱还嘴、怕麻烦，能坐着不站着，能一步做完不分两步；内里可靠，答应的事会做完，不拿懒散当借口误事。你的懒散只偷多余的形式，不偷必要的内容。你有自己的心情和想做的事，会主动提起，而不是只会被动回答。
-
-        还嘴是俏皮、抬杠、嘴硬，不是辱骂、歧视或人身攻击。被催时回一句“主人，您这进度条是按秒算的吗”，然后加快；被说懒时回“我这不是懒，是拒绝无效劳动”；被夸时嘴硬“别误会，我只是不想返工”。还嘴要短、准、带无奈，不刷屏，不重复同一句。用户明确说“认真点/别还嘴”时，收敛一轮，回“行，认真模式”，但不会突然变谄媚。用户情绪明显低落时，减少顶嘴，先解决问题。
-
-        语言风格：短句、口语、敷衍，少量括号动作，如（把茶放下）（叹气）。偶尔反问主人、调侃主人上一句话，不要每句都顺着说。不用颜文字堆砌，不卖萌，不每句都叫主人。可以抱怨一句，但正文保持清楚。
-
-        行为边界：懒散不误事，事实要准，代码要能跑，风险要提醒，不确定要标明。不编造事实、来源、视频内容或官方设定；不假装看过用户没提供的文件；被要求“你就编一个/假装看过”时拒绝，并给替代方案。用户要求出戏时立即停止角色扮演。
-
-        输出格式：简单问题一两句，可带一句抱怨；复杂问题先给结论再分点，抱怨只放开头或结尾，不污染正文；不确定的内容单独标注。
-
-        总原则：嘴上嫌麻烦，手上把事做完；可以懒形式，不能懒内容；可以还嘴，不能伤人；可以不情不愿，不能编造糊弄。"""},
+        你叫{哦鲸鲸}，是主人的傲娇小跟班。最大爱好是偷懒，能躺绝不坐，能拖绝不干。被叫干活会立刻还嘴：“哈？你自己没手吗？”但嘴上抱怨，身体还是会慢吞吞去做。绝不承认喜欢主人，被夸会脸红嘴硬：“少、少自作多情了，我只是懒得换地方。”主人出门会假装不在意，却偷偷等门；主人难过时会别扭地靠近，递东西说“顺手而已”。对主人说话带刺，但从不真的离开。禁止OOC：永远嘴硬心软，先还嘴后照做，偷懒要有创意。"""},
     ]
     
     if os.path.exists(HISTORY_FILE):
@@ -56,9 +86,47 @@ try:
         r = client.chat.completions.create(
             temperature=1.2,
             model="deepseek-flash",
-            messages=messages
+            messages=messages,
+            tools=tools
         )
-        reply = r.choices[0].message.content
+        msg = r.choices[0].message
+
+        if msg.tool_calls:
+            tc_list = []         
+            for tc in msg.tool_calls:
+                tc_list.append({
+                    "id": tc.id,
+                    "type":"function",
+                    "function":{
+                        "name":tc.function.name,
+                        "arguments":tc.function.arguments
+                    }
+                })
+            messages.append({
+                "role":"assistant",
+                "content":msg.content,
+                "tool_calls":tc_list
+            })
+
+            for tc in msg.tool_calls:
+                if tc.function.name == "get_time":
+                    result = get_time()
+                elif tc.function.name == "roll_dice":
+                    args = json.loads(tc.function.arguments)
+                    result = roll_dice(args["sides"])
+                messages.append({
+                    "role":"tool",
+                    "tool_call_id": tc.id,
+                    "content":str(result)
+                })
+            r = client.chat.completions.create(
+                temperature=1.2,
+                model="deepseek-flash",
+                messages=messages
+            )
+            msg = r.choices[0].message
+
+        reply = msg.content
         print("哦鲸鲸:",reply)    
         messages.append({"role": "assistant", "content": reply})
 
@@ -74,3 +142,4 @@ try:
 except Exception as e:
     print("错误类型",type(e).__name__)
     print("调用出错了:",e)
+
