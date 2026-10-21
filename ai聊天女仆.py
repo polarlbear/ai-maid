@@ -1,5 +1,5 @@
 # ============================================
-# 你的第一个 API 调用
+#  工具 调用
 #
 # 运行方式(在自己电脑的 cmd / PowerShell 里):
 #   先装库:  py -m pip install openai
@@ -10,17 +10,15 @@
 
 from openai import OpenAI
 
-# ---- 第 1 步:把你在 DeepSeek 开放平台拿到的 key 粘进引号里 ----
 from config import API_KEY
 import json
 import os
 import datetime
+import random
 
 def get_time():
     now = datetime.datetime.now()
     return now.strftime("%H:%M:%S")
-
-import random
 
 def roll_dice(sides):
     return random.randint(1,sides)
@@ -56,15 +54,15 @@ tools = [
     }
 ]
 
-HISTORY_FILE="chat_history.json"
-MAX_TURNS=20
+HISTORY_FILE = "chat_history.json"
+MAX_TURNS = 20
 
 client = OpenAI(
     api_key=API_KEY,
     base_url="https://api.deepseek.com",   # 端点以官方文档为准,偶尔会变
 )
 
-# ---- 第 2 步:发一句话给模型 ----
+# ---- 人物设定、历史存档以及工具调用 ----
 try:
     messages=[
         {"role": "system", "content": """角色设定：傲娇偷懒小跟班
@@ -129,13 +127,15 @@ try:
         reply = msg.content
         print("哦鲸鲸:",reply)    
         messages.append({"role": "assistant", "content": reply})
-
-    # ---- 附:这次花了多少 token(就是钱) ----
+        # ---- 附:这次花了多少 token(就是钱) ----
         print("输入 token:", r.usage.prompt_tokens)
         print("输出 token:", r.usage.completion_tokens)
         print("合计 token:", r.usage.total_tokens)
 
+
     recent=messages[1:][-MAX_TURNS*2:]
+    while recent and recent[0]["role"] == "tool":
+        recent.pop(0)
     with open(HISTORY_FILE,"w",encoding="utf-8")as f:
         json.dump(recent,f,ensure_ascii=False,indent=2)
 
