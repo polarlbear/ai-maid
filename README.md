@@ -1,14 +1,16 @@
 # AI 女仆聊天（哦鲸鲸）
 
-会角色扮演聊天的本地 AI 女仆，支持工具调用（报时 / 掷骰子/联网搜索）。
+会角色扮演聊天的本地 AI 女仆，支持工具调用（报时 / 掷骰子/联网搜索），可识别图片。
 
-![聊天截图](demo.png)
+![聊天截图](demo.png)(demo2.png)
 
 ## 功能
 - 角色人设可改
 - 多轮对话（记得前文）
 - 聊天记录自动存档，下次启动接着聊
-- 工具调用（get_time,roll_dice,web_search）
+- 工具调用（get_time,roll_dice,web_search,search_images）
+- 人设/工具改动仅需改动一个文件
+- 自动质检：裁判模型机型
 - 上下文自动裁剪（MAX_TURNS），防止 token 无限增长
 - 密钥分离（config.py），不暴露 API key
 
@@ -19,6 +21,6 @@
 4. 输入 `exit` 或 `退出` 结束并自动存档
 
 ## 技术栈
-Python + OpenAI SDK（DeepSeek 兼容端点） + pip install openai
+Python + OpenAI SDK（DeepSeek 兼容端点） + pip install openai + DDGS
 
 注：联网搜索功能需本机开代理，代理地址位于代码28行，端口按自己的改

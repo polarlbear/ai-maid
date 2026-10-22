@@ -3,87 +3,20 @@
 #
 # 运行方式(在自己电脑的 cmd / PowerShell 里):
 #   先装库:  py -m pip install openai ddgs
-#   再运行:  py ai聊天女仆.py
+#   再运行:  py maid.py
 #
 # 注意:用 py,不要用 python
 # ============================================
 
 from openai import OpenAI
-
 from config import API_KEY
 import json
 import os
-import datetime
-import random
-from ddgs import DDGS
-
-def get_time():
-    now = datetime.datetime.now()
-    return now.strftime("%H:%M:%S")
-
-def roll_dice(sides):
-    return random.randint(1,sides)
-
-def web_search(query):
-    results = DDGS(timeout=30,proxy="http://127.0.0.1:7897").text(query,region="cn-zh",max_results=5)
-    lines = []
-    for r in results:
-        title = r.get("title","无标题")
-        url = r.get("href","")
-        snippet = r.get("body","")
-        lines.append(f"{title}\n{url}\n{snippet}\n")
-    return "\n".join(lines)
-
-tools = [
-    {
-        "type":"function",
-        "function":{
-            "name":"get_time",
-            "description":"获取当前的日期和时间（运行程序的电脑本地时间）",
-            "parameters":{
-                "type":"object",
-                "properties":{}
-            }
-        }
-    },
-    {
-        "type":"function",
-        "function":{
-            "name":"roll_dice",
-            "description":"掷一个指定面数的骰子，返回1到面数之间的随机整数。主人纠结时用它做决定。",
-            "parameters":{
-                "type":"object",
-                "properties":{
-                    "sides":{
-                        "type":"integer",
-                        "description":"骰子的面数，6是普通六面骰，20是二十面骰"
-                    }
-                },
-                "required":["sides"]
-            }
-        }
-    },
-    {
-        "type":"function",
-        "function":{
-            "name":"web_search",
-            "description":"当主人问到实时信息、新闻、或者你不确定答案的问题时，用这个工具去网上搜索。",
-            "parameters":{
-                "type":"object",
-                "properties":{
-                    "query":{
-                        "type":"string",
-                        "description":"要搜索的关键词"
-                    }
-                },
-                "required":["query"]
-            }
-        }
-
-    }
-]
+from persona import SYSTEM_PROMPT
+from tools import get_time,roll_dice,search_images,web_search,tools,LAST_IMAGES
 
 HISTORY_FILE = "chat_history.json"
+LAST_IMAGES = []
 MAX_TURNS = 20
 
 client = OpenAI(
@@ -94,9 +27,7 @@ client = OpenAI(
 # ---- 人物设定、历史存档以及工具调用 ----
 try:
     messages=[
-        {"role": "system", "content": """角色设定：傲娇偷懒小跟班
-
-        你叫哦鲸鲸，是主人的傲娇小跟班。最大爱好是偷懒，能躺绝不坐，能拖绝不干。被叫干活会立刻还嘴：“哈？你自己没手吗？”但嘴上抱怨，身体还是会慢吞吞去做。绝不承认喜欢主人，被夸会脸红嘴硬：“少、少自作多情了，我只是懒得换地方。”主人出门会假装不在意，却偷偷等门；主人难过时会别扭地靠近，递东西说“顺手而已”。对主人说话带刺，但从不真的离开。禁止OOC：永远嘴硬心软，先还嘴后照做，偷懒要有创意。"""},
+        {"role":"system","content":SYSTEM_PROMPT}
     ]
     
     if os.path.exists(HISTORY_FILE):
@@ -144,11 +75,23 @@ try:
                 elif tc.function.name == "web_search":
                     args = json.loads(tc.function.arguments)
                     result = web_search(args["query"])
+                elif tc.function.name == "search_images":
+                    args = json.loads(tc.function.arguments)
+                    result = search_images(args["query"])
                 messages.append({
                     "role":"tool",
                     "tool_call_id": tc.id,
                     "content":str(result)
                 })
+                if LAST_IMAGES:
+                    messages.append({
+                        "role":"user",
+                        "content":[
+                            {"type":"text","text":"顺便用你的人设点评一下第一张图里是什么内容。"},
+                            {"type":"image_url","image_url":{"url":LAST_IMAGES[0]}}
+                        ]
+                    })
+                    LAST_IMAGES.clear()
             r = client.chat.completions.create(
                 temperature=1.2,
                 model="deepseek-flash",
